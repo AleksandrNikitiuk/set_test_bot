@@ -16,7 +16,7 @@ bot.
 
 import logging
 
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -24,6 +24,7 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     filters,
+    CallbackQueryHandler,
 )
 
 # Enable logging
@@ -35,94 +36,109 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-GENDER, PHOTO, LOCATION, BIO = range(4)
+THEME, LEVEL, QUESTIONS, QUESTION, ANSWERS, ANSWER = range(6)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation and asks the user about their gender."""
-    reply_keyboard = [["Boy", "Girl", "Other"]]
+    buttons = [
+        [
+            InlineKeyboardButton(text="Add new test", callback_data='new_test'),
+            InlineKeyboardButton(text="Done", callback_data='end'),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
 
     await update.message.reply_text(
-        "Hi! My name is Professor Bot. I will hold a conversation with you. "
-        "Send /cancel to stop talking to me.\n\n"
-        "Are you a boy or a girl?",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Boy or Girl?"
-        ),
+        "Этот бот предназначен для создания тестов для HomeOfLanguagesBot. ",
+        reply_markup=keyboard,
     )
 
-    return GENDER
+    return THEME
+
+async def ask_for_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Prompt user to input data for selected feature."""
+    text = "Какая тема?"
+
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=text)
+
+    return LEVEL
 
 
-async def gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected gender and asks for a photo."""
-    user = update.message.from_user
-    logger.info("Gender of %s: %s", user.first_name, update.message.text)
+async def save_theme_and_ask_for_level(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Asks for a theme."""
+    
     await update.message.reply_text(
-        "I see! Please send me a photo of yourself, "
-        "so I know what you look like, or send /skip if you don't want to.",
-        reply_markup=ReplyKeyboardRemove(),
+        "Какой уровень?",
     )
 
-    return PHOTO
+    return QUESTIONS
 
+async def questions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the selected theme and asks for a level."""
+    
+    buttons = [
+        [
+            InlineKeyboardButton(text="Add new question", callback_data='new_question'),
+            InlineKeyboardButton(text="Done", callback_data='end'),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
 
-async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the photo and asks for a location."""
-    user = update.message.from_user
-    photo_file = await update.message.photo[-1].get_file()
-    await photo_file.download_to_drive("user_photo.jpg")
-    logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
     await update.message.reply_text(
-        "Gorgeous! Now, send me your location please, or send /skip if you don't want to."
+        "Добавить новый вопрос? ",
+        reply_markup=keyboard,
     )
 
-    return LOCATION
+    return QUESTION
 
+async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Asks for a theme."""
+    
+    text = "Введите вопрос: "
 
-async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Skips the photo and asks for a location."""
-    user = update.message.from_user
-    logger.info("User %s did not send a photo.", user.first_name)
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=text)
+
+    return ANSWERS
+
+async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the selected theme and asks for a level."""
+    
+    buttons = [
+        [
+            InlineKeyboardButton(text="Add new answer", callback_data='new_answer'),
+            InlineKeyboardButton(text="Done", callback_data='end'),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
     await update.message.reply_text(
-        "I bet you look great! Now, send me your location please, or send /skip."
+        "Добавить новый ответ? ",
+        reply_markup=keyboard,
     )
 
-    return LOCATION
+    return ANSWER
 
+async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Asks for a theme."""
+    
+    text = "Введите ответ: "
 
-async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the location and asks for some info about the user."""
-    user = update.message.from_user
-    user_location = update.message.location
-    logger.info(
-        "Location of %s: %f / %f", user.first_name, user_location.latitude, user_location.longitude
-    )
-    await update.message.reply_text(
-        "Maybe I can visit you sometime! At last, tell me something about yourself."
-    )
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=text)
 
-    return BIO
+    return ANSWERS
 
+async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Asks for a theme."""
+    text = "Какой ответ правильный? "
 
-async def skip_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Skips the location and asks for info about the user."""
-    user = update.message.from_user
-    logger.info("User %s did not send a location.", user.first_name)
-    await update.message.reply_text(
-        "You seem a bit paranoid! At last, tell me something about yourself."
-    )
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=text)
 
-    return BIO
-
-
-async def bio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the info about the user and ends the conversation."""
-    user = update.message.from_user
-    logger.info("Bio of %s: %s", user.first_name, update.message.text)
-    await update.message.reply_text("Thank you! I hope we can talk again some day.")
-
-    return ConversationHandler.END
+    return QUESTIONS
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -145,13 +161,13 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            GENDER: [MessageHandler(filters.Regex("^(Boy|Girl|Other)$"), gender)],
-            PHOTO: [MessageHandler(filters.PHOTO, photo), CommandHandler("skip", skip_photo)],
-            LOCATION: [
-                MessageHandler(filters.LOCATION, location),
-                CommandHandler("skip", skip_location),
-            ],
-            BIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, bio)],
+            THEME: [CallbackQueryHandler(ask_for_theme, pattern="^new_test$")],
+            LEVEL: [MessageHandler(filters.TEXT, save_theme_and_ask_for_level)],
+            QUESTIONS: [MessageHandler(filters.TEXT, questions)],
+            QUESTION: [CallbackQueryHandler(question, pattern="^new_question$")],
+            ANSWERS: [MessageHandler(filters.TEXT, answers)],
+            ANSWER: [CallbackQueryHandler(answer, pattern="^new_answer$"),
+                     CallbackQueryHandler(end, pattern="^end$")],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
