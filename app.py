@@ -36,15 +36,15 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-THEME, LEVEL, QUESTIONS, QUESTION, ANSWERS, ANSWER = range(6)
+THEME, LEVEL, QUESTIONS, QUESTION, ANSWERS, ANSWER, CORRECT_ANSWER = range(7)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation and asks the user about their gender."""
     buttons = [
         [
-            InlineKeyboardButton(text="Add new test", callback_data='new_test'),
-            InlineKeyboardButton(text="Done", callback_data='end'),
+            InlineKeyboardButton(text="Новый тест", callback_data='new_test'),
+            InlineKeyboardButton(text="Закончить", callback_data='end'),
         ],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
@@ -80,8 +80,8 @@ async def questions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     buttons = [
         [
-            InlineKeyboardButton(text="Add new question", callback_data='new_question'),
-            InlineKeyboardButton(text="Done", callback_data='end'),
+            InlineKeyboardButton(text="Добавить новый вопрос", callback_data='new_question'),
+            InlineKeyboardButton(text="Закончить", callback_data='end_questions'),
         ],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
@@ -108,8 +108,8 @@ async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     buttons = [
         [
-            InlineKeyboardButton(text="Add new answer", callback_data='new_answer'),
-            InlineKeyboardButton(text="Done", callback_data='end'),
+            InlineKeyboardButton(text="Добавить новый ответ", callback_data='new_answer'),
+            InlineKeyboardButton(text="Закончить", callback_data='end'),
         ],
     ]
     keyboard = InlineKeyboardMarkup(buttons)
@@ -131,25 +131,52 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ANSWERS
 
-async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def end_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Asks for a theme."""
+    buttons = [
+        [
+            InlineKeyboardButton(text="1", callback_data='one'),
+            InlineKeyboardButton(text="2", callback_data='two'),
+            InlineKeyboardButton(text="3", callback_data='three'),
+            InlineKeyboardButton(text="4", callback_data='four'),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
     text = "Какой ответ правильный? "
+
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+
+    return CORRECT_ANSWER
+
+async def correct_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the selected theme and asks for a level."""
+    
+    buttons = [
+        [
+            InlineKeyboardButton(text="Добавить новый вопрос", callback_data='new_question'),
+            InlineKeyboardButton(text="Закончить", callback_data='end_questions'),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(
+        "Добавить новый вопрос? ",
+        reply_markup=keyboard,
+    )
+
+    return QUESTION
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancels and ends the conversation."""
+    text = "До скорой встречи! "
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text)
 
-    return QUESTIONS
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends the conversation."""
-    user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.first_name)
-    await update.message.reply_text(
-        "Bye! I hope we can talk again some day.", reply_markup=ReplyKeyboardRemove()
-    )
-
-    return ConversationHandler.END
+    return  ConversationHandler.END
 
 
 def main() -> None:
@@ -164,10 +191,12 @@ def main() -> None:
             THEME: [CallbackQueryHandler(ask_for_theme, pattern="^new_test$")],
             LEVEL: [MessageHandler(filters.TEXT, save_theme_and_ask_for_level)],
             QUESTIONS: [MessageHandler(filters.TEXT, questions)],
-            QUESTION: [CallbackQueryHandler(question, pattern="^new_question$")],
+            QUESTION: [CallbackQueryHandler(question, pattern="^new_question$"),
+                       CallbackQueryHandler(cancel, pattern="^end_questions$")],
             ANSWERS: [MessageHandler(filters.TEXT, answers)],
             ANSWER: [CallbackQueryHandler(answer, pattern="^new_answer$"),
-                     CallbackQueryHandler(end, pattern="^end$")],
+                     CallbackQueryHandler(end_answers, pattern="^end$")],
+            CORRECT_ANSWER: [CallbackQueryHandler(correct_answer, pattern="^one|two|three|four$")],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
