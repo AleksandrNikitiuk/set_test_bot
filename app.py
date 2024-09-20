@@ -15,6 +15,7 @@ bot.
 """
 
 import logging
+import json
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -40,7 +41,16 @@ THEME, LEVEL, QUESTIONS, QUESTION, ANSWERS, ANSWER, CORRECT_ANSWER = range(7)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation and asks the user about their gender."""
+    """Starts creating a test."""
+    
+    context.user_data['user_name'] = update.message.from_user
+    
+    context.user_data['theme'] = ""
+    context.user_data['level'] = ""
+    context.user_data['questions'] = []
+    context.user_data['question_number'] = 0
+    context.user_data['enter_question'] = True
+    
     buttons = [
         [
             InlineKeyboardButton(text="Новый тест", callback_data='new_test'),
@@ -57,7 +67,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return THEME
 
 async def ask_for_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Prompt user to input data for selected feature."""
+    """Asks for a test theme."""
+    
+    logger.info("User %s is starting to create a new test.", context.user_data.get('user_name'))
+    
     text = "Какая тема?"
 
     await update.callback_query.answer()
@@ -67,8 +80,11 @@ async def ask_for_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def save_theme_and_ask_for_level(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Asks for a theme."""
+    """Saves the theme and asks for a test level."""
     
+    context.user_data['theme'] = update.message.text
+    logger.info("A theme is %s.", context.user_data.get('theme'))
+
     await update.message.reply_text(
         "Какой уровень?",
     )
@@ -76,7 +92,10 @@ async def save_theme_and_ask_for_level(update: Update, context: ContextTypes.DEF
     return QUESTIONS
 
 async def questions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected theme and asks for a level."""
+    """Stores the selected level and asks for questions."""
+
+    context.user_data['level'] = update.message.text
+    logger.info("A level is %s.", context.user_data.get('level'))
     
     buttons = [
         [
@@ -94,9 +113,14 @@ async def questions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return QUESTION
 
 async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Asks for a theme."""
+    """Asks for a question."""
     
-    text = "Введите вопрос: "
+    if context.user_data.get('questions') == None:
+        context.user_data['questions'] = []
+        context.user_data['question_number'] = 0
+    context.user_data['enter_question'] = True
+    
+    text = "Вопрос может быть введен на любом языке. Если в вопросе предполагается пропуск, который должен заполнить ученик, напишите по английски слово Answer или answer в зависимости от того, в начале предложения находится слово или нет. Введите вопрос: "
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text)
@@ -104,7 +128,18 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ANSWERS
 
 async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected theme and asks for a level."""
+    """Stores the question and asks for a answer."""
+    
+    questions = context.user_data.get('questions')
+    question_number = context.user_data.get('question_number')
+    if context.user_data.get('enter_question'):
+        question_with_answers = {'question': update.message.text, 'answers': [], 'correct_answer': ""}
+        questions.append(question_with_answers)
+        context.user_data['enter_question'] = False
+    else:
+        questions[question_number]['answers'].append(update.message.text)
+    context.user_data['questions'] = questions
+    logger.info("Current question with answers are %s.", questions)
     
     buttons = [
         [
@@ -122,7 +157,7 @@ async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ANSWER
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Asks for a theme."""
+    """Chooses the correct answer."""
     
     text = "Введите ответ: "
 
@@ -131,17 +166,36 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ANSWERS
 
+async def generate_buttons(answers):
+    "Generates the answers buttons for choosing correct answer."
+    num_buttons = len(answers)
+    buttons = []
+    for i in range(1, num_buttons + 1):
+        button = InlineKeyboardButton(text=answers[i - 1], callback_data=f'button_{i}')
+        buttons.append(button)
+    return [buttons]
+
 async def end_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Asks for a theme."""
-    buttons = [
+    """Asks for a correct answer."""
+    
+    """buttons = [
         [
             InlineKeyboardButton(text="1", callback_data='one'),
             InlineKeyboardButton(text="2", callback_data='two'),
             InlineKeyboardButton(text="3", callback_data='three'),
             InlineKeyboardButton(text="4", callback_data='four'),
         ],
-    ]
-    keyboard = InlineKeyboardMarkup(buttons)
+    ]"""
+    questions = context.user_data.get('questions')
+    question_number = context.user_data.get('question_number')
+
+    if len(questions[question_number]['answers']) <= 1:
+        questions[question_number]['answers'] = []
+        questions[question_number]['answers'].append("True")
+        questions[question_number]['answers'].append("False")
+        context.user_data['questions'] = questions
+
+    keyboard = InlineKeyboardMarkup( await generate_buttons(questions[question_number]['answers']) )
 
     text = "Какой ответ правильный? "
 
@@ -151,7 +205,23 @@ async def end_answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return CORRECT_ANSWER
 
 async def correct_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected theme and asks for a level."""
+    """Stores the correct answer and asks for a new question."""
+    
+    questions = context.user_data.get('questions')
+    question_number = context.user_data.get('question_number')
+    context.user_data['question_number'] = question_number + 1
+    correct_answer_button_name = update.callback_query.data
+    match str(correct_answer_button_name):
+        case "button_1":
+            questions[question_number]['correct_answer'] = questions[question_number]['answers'][0]
+        case "button_2":
+            questions[question_number]['correct_answer'] = questions[question_number]['answers'][1]
+        case "button_3":
+            questions[question_number]['correct_answer'] = questions[question_number]['answers'][2]
+        case "button_4":
+            questions[question_number]['correct_answer'] = questions[question_number]['answers'][3]
+    context.user_data['questions'] = questions
+    logger.info("Correct answer is %s.", questions[question_number]['correct_answer'])
     
     buttons = [
         [
@@ -163,15 +233,22 @@ async def correct_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        "Добавить новый вопрос? ",
+        "Количество вопросов: " + str(context.user_data['question_number']) + ". Добавить новый вопрос?",
         reply_markup=keyboard,
     )
 
     return QUESTION
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends the conversation."""
-    text = "До скорой встречи! "
+    """Cancels and ends the test creating. Saves data."""
+    
+    if not context.user_data.get('questions') is None:
+        with open('test_data.json', 'w') as test_data_json_file:
+            json.dump([context.user_data.get('theme'), context.user_data.get('level')], test_data_json_file)
+        with open('questions.json', 'w') as questions_json_file:
+            json.dump(context.user_data.get('questions'), questions_json_file)
+    
+    text = "До скорой встречи!"
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=text)
@@ -196,7 +273,7 @@ def main() -> None:
             ANSWERS: [MessageHandler(filters.TEXT, answers)],
             ANSWER: [CallbackQueryHandler(answer, pattern="^new_answer$"),
                      CallbackQueryHandler(end_answers, pattern="^end$")],
-            CORRECT_ANSWER: [CallbackQueryHandler(correct_answer, pattern="^one|two|three|four$")],
+            CORRECT_ANSWER: [CallbackQueryHandler(correct_answer, pattern="^button_1|button_2|button_3|button_4$")],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
