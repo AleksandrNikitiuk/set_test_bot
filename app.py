@@ -16,7 +16,6 @@ bot.
 
 import logging
 import json
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -27,6 +26,8 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
 )
+from warnings import filterwarnings
+from telegram.warnings import PTBUserWarning
 
 # Enable logging
 logging.basicConfig(
@@ -264,6 +265,8 @@ def main() -> None:
     """Run the bot."""
     # Create the Application and pass it your bot's token.
     application = Application.builder().token("7422563960:AAFYrkWObqC3iKx6mT7qg5qhzYUSdUW8cy4").build()
+
+    filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
     # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
     conv_handler = ConversationHandler(
