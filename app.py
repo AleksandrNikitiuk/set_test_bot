@@ -69,7 +69,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def ask_for_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Asks for a test theme."""
     
-    logger.info("User %s is starting to create a new test.", context.user_data.get('user_name'))
+    logger.info("User %s is starting to create a new test.", context.user_data.get('user_name').first_name)
     
     text = "Какая тема?"
 
@@ -119,11 +119,11 @@ async def question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data['questions'] = []
         context.user_data['question_number'] = 0
     context.user_data['enter_question'] = True
-    
-    text = "Вопрос может быть введен на любом языке. Если в вопросе предполагается пропуск, который должен заполнить ученик, напишите по английски слово Answer или answer в зависимости от того, в начале предложения находится слово или нет. Введите вопрос: "
 
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text)
+    await update.callback_query.edit_message_text(
+        "_Если в вопросе предполагается пропуск, который должен заполнить ученик, напишите по английски слово_ *Answer* _или_ *answer* _в зависимости от того, в начале предложения находится слово или нет. Вопрос может быть введен на любом языке._\n\nВведите вопрос: "
+    , parse_mode='Markdown')
 
     return ANSWERS
 
@@ -133,11 +133,13 @@ async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     questions = context.user_data.get('questions')
     question_number = context.user_data.get('question_number')
     if context.user_data.get('enter_question'):
-        question_with_answers = {'question': update.message.text, 'answers': [], 'correct_answer': ""}
+        question_with_answers = {'question': update.message.text.split(), 'answers': [], 'correct_answer': ""}
         questions.append(question_with_answers)
         context.user_data['enter_question'] = False
+        context.user_data['answers_number'] = 0
     else:
         questions[question_number]['answers'].append(update.message.text)
+        context.user_data['answers_number'] += 1
     context.user_data['questions'] = questions
     logger.info("Current question with answers are %s.", questions)
     
@@ -150,8 +152,9 @@ async def answers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = InlineKeyboardMarkup(buttons)
 
     await update.message.reply_text(
-        "Добавить новый ответ? ",
+        "*Количество ответов: " + str(context.user_data.get('answers_number')) + ".*\n_Если введено менее двух вариантов ответов, то по нажатию на кнопки Закончить будут установлены варианты_ *True* _и_ *False*.\n\nДобавить новый ответ? ",
         reply_markup=keyboard,
+        parse_mode='Markdown'
     )
 
     return ANSWER
@@ -233,8 +236,9 @@ async def correct_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        "Количество вопросов: " + str(context.user_data['question_number']) + ". Добавить новый вопрос?",
+        "*Количество вопросов: " + str(context.user_data['question_number']) + ".*\n\nДобавить новый вопрос?",
         reply_markup=keyboard,
+        parse_mode='Markdown'
     )
 
     return QUESTION
@@ -243,10 +247,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the test creating. Saves data."""
     
     if not context.user_data.get('questions') is None:
-        with open('test_data.json', 'w') as test_data_json_file:
-            json.dump([context.user_data.get('theme'), context.user_data.get('level')], test_data_json_file)
-        with open('questions.json', 'w') as questions_json_file:
-            json.dump(context.user_data.get('questions'), questions_json_file)
+        with open('test_data.json', 'w', encoding='utf-8') as test_data_json_file:
+            json.dump([context.user_data.get('theme'), context.user_data.get('level')], test_data_json_file, ensure_ascii=False)
+        with open('questions.json', 'w', encoding='utf-8') as questions_json_file:
+            json.dump(context.user_data.get('questions'), questions_json_file, ensure_ascii=False)
     
     text = "До скорой встречи!"
 
