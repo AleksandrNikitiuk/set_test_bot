@@ -268,7 +268,7 @@ def main() -> None:
 
     filterwarnings(action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning)
 
-    # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
+    # Add conversation handler with the states THEME, LEVEL, QUESTIONS, QUESTION, ANSWERS, ANSWER and CORRECT_ANSWER
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
